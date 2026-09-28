@@ -1,0 +1,34 @@
+title: Nonogram
+priority: 0.1
+
+contents: >
+  Nine Lives — a nonogram (picross) puzzle game of hand-drawn pixel cats,
+  as one self-contained HTML file. Four puzzles: a 5x5 kitten, two 10x10s
+  and a 15x15 sitting cat. Came out of a Claude conversation on 2026-09-14;
+  see transcripts/2026-09-14.md.
+
+children:
+  - title: play it once locally and confirm all four puzzles solve
+    priority: 0.6
+    created: 2026-09-25
+    contents: >
+      Open index.html straight from disk. Check drag-painting, right-click
+      to mark, the hint button and the win animation on each puzzle.
+
+  - title: persist best times outside the artifact runtime
+    priority: 0.5
+    created: 2026-09-25
+    contents: >
+      The game reads best times from window.storage, which only exists
+      inside claude.ai. Opened from disk it falls back to in-memory, so
+      records vanish on reload. Swap in localStorage behind the same
+      get/set shape at the `store` binding.
+
+  - title: draw more cats
+    priority: 0.3
+    created: 2026-09-25
+    contents: >
+      Puzzles live in the PUZZLES array as arrays of '#'/'.' strings;
+      clues are derived at load. Adding one is appending N strings.
+      Grids are authored by hand — downsampled photos threshold into
+      noise and produce clue sets that are not logically solvable.

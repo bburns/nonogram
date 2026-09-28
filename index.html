@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Nine Lives — a nonogram of cats</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#141a1d;
+    --panel:#1b2326;
+    --line:#2a3538;
+    --line-hard:#41545a;
+    --bone:#f2ede3;
+    --muted:#7a8a90;
+    --dim:#4c5c62;
+    --gold:#e8b54b;
+    --cell:26px;
+    --gutter:60px;
+    --colgutter:60px;
+    --n:10;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--bg);
+    color:var(--bone);
+    font-family:"DM Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+    -webkit-font-smoothing:antialiased;
+    display:flex;justify-content:center;
+    padding:18px 12px 40px;
+    min-height:100vh;
+  }
+  .wrap{width:100%;max-width:760px}
+
+  header{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+  h1{
+    font-family:"Bricolage Grotesque",system-ui,sans-serif;
+    font-weight:700;font-size:26px;letter-spacing:-.02em;margin:0;
+  }
+  .tag{color:var(--muted);font-size:12.5px}
+
+  .picker{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px}
+  .chip{
+    font:inherit;font-size:12.5px;color:var(--muted);
+    background:var(--panel);border:1px solid var(--line);
+    padding:6px 10px;cursor:pointer;line-height:1;
+  }
+  .chip:hover{color:var(--bone);border-color:var(--line-hard)}
+  .chip[aria-pressed="true"]{background:var(--bone);border-color:var(--bone);color:#141a1d}
+  .chip .dot{color:var(--gold);margin-left:6px}
+  .chip[aria-pressed="true"] .dot{color:#b57f12}
+
+  .board{
+    display:grid;
+    grid-template-columns:var(--gutter) calc(var(--cell) * var(--n));
+    grid-template-rows:var(--colgutter) calc(var(--cell) * var(--n));
+    margin:0 auto;width:max-content;
+    touch-action:none;
+  }
+  .corner{position:relative}
+  .corner::after{
+    content:"";position:absolute;right:7px;bottom:7px;width:9px;height:9px;
+    border-right:2px solid var(--dim);border-bottom:2px solid var(--dim);
+  }
+
+  .col-clues{display:grid;grid-template-columns:repeat(var(--n),var(--cell))}
+  .col-clues > div{
+    display:flex;flex-direction:column;justify-content:flex-end;align-items:center;
+    padding-bottom:5px;color:var(--muted);font-size:calc(var(--cell) * .48);line-height:1.15;
+  }
+  .row-clues{display:grid;grid-template-rows:repeat(var(--n),var(--cell))}
+  .row-clues > div{
+    display:flex;justify-content:flex-end;align-items:center;gap:.45em;
+    padding-right:7px;color:var(--muted);font-size:calc(var(--cell) * .48);
+  }
+  .col-clues > div.done, .row-clues > div.done{color:var(--dim)}
+  .col-clues > div.hl, .row-clues > div.hl{color:var(--gold)}
+  .zero{color:var(--dim)}
+
+  .cells{
+    position:relative;
+    display:grid;
+    grid-template-columns:repeat(var(--n),var(--cell));
+    grid-template-rows:repeat(var(--n),var(--cell));
+    border:2px solid var(--line-hard);
+    background:var(--panel);
+  }
+  .cell{
+    border-right:1px solid var(--line);border-bottom:1px solid var(--line);
+    position:relative;cursor:pointer;
+  }
+  .cell.r5{border-bottom-color:var(--line-hard)}
+  .cell.c5{border-right-color:var(--line-hard)}
+  .cell:nth-child(n){outline-offset:-2px}
+  .cell.on{background:var(--bone)}
+  .cell.off::before,.cell.off::after{
+    content:"";position:absolute;left:28%;top:50%;width:44%;height:1.5px;background:var(--dim);
+  }
+  .cell.off::before{transform:rotate(45deg)}
+  .cell.off::after{transform:rotate(-45deg)}
+  .cell:focus-visible{outline:2px solid var(--gold);z-index:3}
+  .crosshair{position:absolute;pointer-events:none;background:rgba(232,181,75,.10);display:none}
+  .board.fine .crosshair{display:block}
+
+  .board.solved .cells{border-color:var(--gold);background:#111618}
+  .board.solved .cell{border-color:transparent}
+  .board.solved .cell.off::before,.board.solved .cell.off::after{opacity:0}
+  .board.solved .crosshair{display:none}
+  .board.solved .cell.on{animation:pop .32s ease-out backwards;animation-delay:var(--d)}
+  @keyframes pop{from{transform:scale(.25);opacity:0}to{transform:scale(1);opacity:1}}
+
+  .bar{
+    display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+    margin:16px auto 0;width:max-content;max-width:100%;
+  }
+  button.tool{
+    font:inherit;font-size:13px;color:var(--bone);background:var(--panel);
+    border:1px solid var(--line);padding:9px 12px;cursor:pointer;line-height:1;
+  }
+  button.tool:hover{border-color:var(--line-hard)}
+  button.tool[aria-pressed="true"]{background:var(--bone);color:#141a1d;border-color:var(--bone)}
+  button.tool:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+  .spacer{flex:1;min-width:8px}
+  .clock{color:var(--muted);font-size:13px;min-width:52px;text-align:right}
+
+  .status{
+    margin:18px auto 0;width:max-content;max-width:100%;text-align:center;
+    font-size:13.5px;color:var(--muted);min-height:44px;
+  }
+  .status strong{
+    display:block;font-family:"Bricolage Grotesque",system-ui,sans-serif;
+    font-weight:700;font-size:19px;color:var(--gold);letter-spacing:-.01em;margin-bottom:3px;
+  }
+  .help{margin-top:22px;color:var(--dim);font-size:12px;text-align:center;line-height:1.7}
+  kbd{font:inherit;color:var(--muted);border:1px solid var(--line);padding:1px 4px}
+  @media (prefers-reduced-motion:reduce){
+    .board.solved .cell.on{animation:none}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Nine Lives</h1>
+    <span class="tag">fill the squares the numbers describe, and a cat turns up</span>
+  </header>
+
+  <div class="picker" id="picker"></div>
+
+  <div class="board" id="board">
+    <div class="corner"></div>
+    <div class="col-clues" id="colClues"></div>
+    <div class="row-clues" id="rowClues"></div>
+    <div class="cells" id="cells">
+      <div class="crosshair" id="hlRow"></div>
+      <div class="crosshair" id="hlCol"></div>
+    </div>
+  </div>
+
+  <div class="bar">
+    <button class="tool" id="mFill" aria-pressed="true">Fill</button>
+    <button class="tool" id="mMark" aria-pressed="false">Mark ✕</button>
+    <span class="spacer"></span>
+    <button class="tool" id="undo">Undo</button>
+    <button class="tool" id="hint">Hint</button>
+    <button class="tool" id="clear">Clear</button>
+    <span class="clock" id="clock">0:00</span>
+  </div>
+
+  <div class="status" id="status"></div>
+
+  <p class="help">
+    Drag to paint a run. Right-click paints ✕.<br>
+    Arrow keys move, <kbd>space</kbd> fills, <kbd>x</kbd> marks.
+  </p>
+</div>
+
+<script>
+const PUZZLES = [
+  { name:"Kitten", rows:[
+    "#...#",
+    "#####",
+    "#.#.#",
+    "#####",
+    ".#.#."
+  ]},
+  { name:"Loaf", rows:[
+    "......#.#.",
+    ".....#####",
+    ".######.##",
+    "##########",
+    "##########",
+    "##########",
+    "#########.",
+    ".#######..",
+    "..#####...",
+    "...####..."
+  ]},
+  { name:"Whiskers", rows:[
+    "##......##",
+    "#.#....#.#",
+    "#..####..#",
+    ".########.",
+    ".#.####.#.",
+    ".########.",
+    ".###..###.",
+    ".########.",
+    "..######..",
+    "...####..."
+  ]},
+  { name:"Sitting cat", rows:[
+    "...............",
+    "..#.......#....",
+    "..##.....##....",
+    "..#.#####.#....",
+    ".###########...",
+    ".#.#######.#...",
+    ".###########...",
+    ".####.#.####...",
+    "..#########....",
+    "...#######..#..",
+    "..########.####",
+    "..########.##.#",
+    "..#########..##",
+    "..############.",
+    ".####..####...."
+  ]}
+];
+
+const clueOf = arr => {
+  const out = []; let n = 0;
+  for (const v of arr) { if (v === 1) n++; else if (n) { out.push(n); n = 0; } }
+  if (n) out.push(n);
+  return out.length ? out : [0];
+};
+const same = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+
+const el = id => document.getElementById(id);
+const boardEl = el("board"), cellsEl = el("cells"), rowCluesEl = el("rowClues"),
+      colCluesEl = el("colClues"), pickerEl = el("picker"), statusEl = el("status"),
+      clockEl = el("clock"), hlRow = el("hlRow"), hlCol = el("hlCol");
+
+const store = (typeof window !== "undefined" && window.storage) ? window.storage : null;
+let records = {};                      // name -> seconds
+const progress = new Map();            // name -> state grid (this session)
+
+let P, N, solution, rowClues, colClues, state, cellNodes;
+let mode = 1, drag = null, undoStack = [], solved = false;
+let seconds = 0, ticking = null, focusI = 0, focusJ = 0;
+
+function load(index) {
+  P = PUZZLES[index];
+  N = P.rows.length;
+  solution = P.rows.map(r => [...r].map(c => (c === "#" ? 1 : 0)));
+  rowClues = solution.map(clueOf);
+  colClues = Array.from({ length: N }, (_, j) => clueOf(solution.map(r => r[j])));
+
+  state = progress.get(P.name) || Array.from({ length: N }, () => new Array(N).fill(0));
+  progress.set(P.name, state);
+
+  undoStack = [];
+  solved = false;
+  seconds = 0;
+  stopClock();
+  clockEl.textContent = "0:00";
+  boardEl.classList.remove("solved");
+  statusEl.innerHTML = "";
+  focusI = focusJ = 0;
+
+  build();
+  layout();
+  paintAll();
+  checkLines();
+  if (isSolved()) finish(true);
+  drawPicker();
+}
+
+function build() {
+  boardEl.style.setProperty("--n", N);
+
+  rowCluesEl.innerHTML = "";
+  colCluesEl.innerHTML = "";
+  rowClues.forEach(c => {
+    const d = document.createElement("div");
+    d.innerHTML = c.map(n => `<span class="${n ? "" : "zero"}">${n}</span>`).join("");
+    rowCluesEl.appendChild(d);
+  });
+  colClues.forEach(c => {
+    const d = document.createElement("div");
+    d.innerHTML = c.map(n => `<span class="${n ? "" : "zero"}">${n}</span>`).join("");
+    colCluesEl.appendChild(d);
+  });
+
+  [...cellsEl.querySelectorAll(".cell")].forEach(n => n.remove());
+  cellNodes = [];
+  for (let i = 0; i < N; i++) {
+    cellNodes[i] = [];
+    for (let j = 0; j < N; j++) {
+      const c = document.createElement("div");
+      c.className = "cell" + ((i + 1) % 5 === 0 ? " r5" : "") + ((j + 1) % 5 === 0 ? " c5" : "");
+      c.dataset.i = i; c.dataset.j = j;
+      c.tabIndex = -1;
+      c.style.setProperty("--d", ((i + j) * 22) + "ms");
+      cellsEl.appendChild(c);
+      cellNodes[i][j] = c;
+    }
+  }
+}
+
+function layout() {
+  const maxRow = Math.max(...rowClues.map(c => c.length));
+  const maxCol = Math.max(...colClues.map(c => c.length));
+  const avail = Math.min(document.querySelector(".wrap").clientWidth, 720) - 4;
+  let cell = Math.floor(avail / (N + maxRow * 0.78));
+  cell = Math.max(17, Math.min(40, cell));
+  boardEl.style.setProperty("--cell", cell + "px");
+  boardEl.style.setProperty("--gutter", Math.ceil(cell * 0.62 * maxRow + 8) + "px");
+  boardEl.style.setProperty("--colgutter", Math.ceil(cell * 0.66 * maxCol + 8) + "px");
+  hlRow.style.height = cell + "px"; hlRow.style.width = cell * N + "px";
+  hlCol.style.width = cell + "px";  hlCol.style.height = cell * N + "px";
+}
+
+function paintAll() {
+  for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) draw(i, j);
+}
+function draw(i, j) {
+  const c = cellNodes[i][j], v = state[i][j];
+  c.classList.toggle("on", v === 1);
+  c.classList.toggle("off", v === 2);
+}
+
+function setCell(i, j, v) {
+  if (solved || state[i][j] === v) return false;
+  state[i][j] = v;
+  draw(i, j);
+  return true;
+}
+
+function checkLines() {
+  for (let i = 0; i < N; i++)
+    rowCluesEl.children[i].classList.toggle("done", same(clueOf(state[i].map(v => v === 1 ? 1 : 0)), rowClues[i]));
+  for (let j = 0; j < N; j++)
+    colCluesEl.children[j].classList.toggle("done", same(clueOf(state.map(r => r[j] === 1 ? 1 : 0)), colClues[j]));
+}
+
+function isSolved() {
+  for (let i = 0; i < N; i++)
+    if (!same(clueOf(state[i].map(v => v === 1 ? 1 : 0)), rowClues[i])) return false;
+  for (let j = 0; j < N; j++)
+    if (!same(clueOf(state.map(r => r[j] === 1 ? 1 : 0)), colClues[j])) return false;
+  return true;
+}
+
+function finish(silent) {
+  solved = true;
+  stopClock();
+  boardEl.classList.add("solved");
+  for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) if (state[i][j] === 2) setCellForce(i, j, 0);
+  const best = records[P.name];
+  if (!silent && (best == null || seconds < best)) { records[P.name] = seconds; save(); }
+  statusEl.innerHTML = `<strong>${P.name}</strong>` +
+    (silent ? "already solved" : `solved in ${fmt(seconds)}` +
+      (best != null && seconds >= best ? ` · best ${fmt(best)}` : ""));
+  drawPicker();
+}
+function setCellForce(i, j, v) { state[i][j] = v; draw(i, j); }
+
+/* ---- input ---- */
+cellsEl.addEventListener("contextmenu", e => e.preventDefault());
+
+cellsEl.addEventListener("pointerdown", e => {
+  const c = e.target.closest(".cell");
+  if (!c || solved) return;
+  e.preventDefault();
+  cellsEl.setPointerCapture(e.pointerId);
+  startClock();
+  undoStack.push(state.map(r => r.slice()));
+  if (undoStack.length > 40) undoStack.shift();
+  const i = +c.dataset.i, j = +c.dataset.j;
+  const want = (e.button === 2) ? 2 : mode;
+  drag = { target: state[i][j] === want ? 0 : want };
+  apply(i, j);
+});
+
+cellsEl.addEventListener("pointermove", e => {
+  const node = document.elementFromPoint(e.clientX, e.clientY);
+  const c = node && node.closest ? node.closest(".cell") : null;
+  if (c) {
+    const i = +c.dataset.i, j = +c.dataset.j;
+    moveCrosshair(i, j);
+    if (drag) apply(i, j);
+  }
+});
+cellsEl.addEventListener("pointerleave", () => { if (!drag) clearCrosshair(); });
+window.addEventListener("pointerup", () => { drag = null; });
+
+function apply(i, j) {
+  if (!drag) return;
+  if (setCell(i, j, drag.target)) {
+    checkLines();
+    if (isSolved()) finish(false);
+  }
+  focusI = i; focusJ = j;
+}
+
+function moveCrosshair(i, j) {
+  const cell = parseFloat(getComputedStyle(boardEl).getPropertyValue("--cell"));
+  hlRow.style.transform = `translateY(${i * cell}px)`;
+  hlCol.style.transform = `translateX(${j * cell}px)`;
+  [...rowCluesEl.children].forEach((d, k) => d.classList.toggle("hl", k === i));
+  [...colCluesEl.children].forEach((d, k) => d.classList.toggle("hl", k === j));
+}
+function clearCrosshair() {
+  [...rowCluesEl.children].forEach(d => d.classList.remove("hl"));
+  [...colCluesEl.children].forEach(d => d.classList.remove("hl"));
+}
+if (window.matchMedia("(pointer:fine)").matches) boardEl.classList.add("fine");
+
+document.addEventListener("keydown", e => {
+  if (e.target.closest("button")) return;
+  const k = e.key;
+  if (k === "ArrowUp") focusI = Math.max(0, focusI - 1);
+  else if (k === "ArrowDown") focusI = Math.min(N - 1, focusI + 1);
+  else if (k === "ArrowLeft") focusJ = Math.max(0, focusJ - 1);
+  else if (k === "ArrowRight") focusJ = Math.min(N - 1, focusJ + 1);
+  else if (k === " " || k.toLowerCase() === "x") {
+    if (solved) return;
+    const want = k === " " ? 1 : 2;
+    undoStack.push(state.map(r => r.slice()));
+    startClock();
+    setCell(focusI, focusJ, state[focusI][focusJ] === want ? 0 : want);
+    checkLines();
+    if (isSolved()) finish(false);
+  } else return;
+  e.preventDefault();
+  cellNodes[focusI][focusJ].focus();
+  moveCrosshair(focusI, focusJ);
+});
+
+/* ---- tools ---- */
+function setMode(m) {
+  mode = m;
+  el("mFill").setAttribute("aria-pressed", m === 1);
+  el("mMark").setAttribute("aria-pressed", m === 2);
+}
+el("mFill").onclick = () => setMode(1);
+el("mMark").onclick = () => setMode(2);
+
+el("undo").onclick = () => {
+  if (solved || !undoStack.length) return;
+  const prev = undoStack.pop();
+  for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) setCellForce(i, j, prev[i][j]);
+  checkLines();
+};
+
+el("clear").onclick = () => {
+  if (!solved) undoStack.push(state.map(r => r.slice()));
+  solved = false;
+  boardEl.classList.remove("solved");
+  statusEl.innerHTML = "";
+  for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) setCellForce(i, j, 0);
+  checkLines();
+  seconds = 0; stopClock(); clockEl.textContent = "0:00";
+};
+
+el("hint").onclick = () => {
+  if (solved) return;
+  const gaps = [];
+  for (let i = 0; i < N; i++) for (let j = 0; j < N; j++)
+    if (solution[i][j] === 1 && state[i][j] !== 1) gaps.push([i, j]);
+  if (!gaps.length) { statusEl.innerHTML = "Nothing left to give away."; return; }
+  const [i, j] = gaps[Math.floor(Math.random() * gaps.length)];
+  undoStack.push(state.map(r => r.slice()));
+  startClock();
+  setCellForce(i, j, 1);
+  seconds += 30;
+  clockEl.textContent = fmt(seconds);
+  statusEl.innerHTML = "One square revealed. Thirty seconds added.";
+  checkLines();
+  if (isSolved()) finish(false);
+};
+
+/* ---- clock ---- */
+const fmt = s => Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
+function startClock() {
+  if (ticking || solved) return;
+  ticking = setInterval(() => { seconds++; clockEl.textContent = fmt(seconds); }, 1000);
+}
+function stopClock() { clearInterval(ticking); ticking = null; }
+
+/* ---- picker + storage ---- */
+let current = 0;
+function drawPicker() {
+  pickerEl.innerHTML = "";
+  PUZZLES.forEach((p, k) => {
+    const b = document.createElement("button");
+    b.className = "chip";
+    b.setAttribute("aria-pressed", k === current);
+    const n = p.rows.length;
+    b.innerHTML = `${p.name} <span style="opacity:.6">${n}×${n}</span>` +
+      (records[p.name] != null ? `<span class="dot">✦</span>` : "");
+    b.onclick = () => { current = k; load(k); };
+    pickerEl.appendChild(b);
+  });
+}
+
+async function save() {
+  if (!store) return;
+  try { await store.set("nonogram:records", JSON.stringify(records)); } catch (err) { /* offline is fine */ }
+}
+async function init() {
+  if (store) {
+    try {
+      const r = await store.get("nonogram:records");
+      if (r && r.value) records = JSON.parse(r.value);
+    } catch (err) { records = {}; }
+  }
+  load(0);
+}
+
+window.addEventListener("resize", () => { layout(); });
+init();
+</script>
+</body>
+</html>
