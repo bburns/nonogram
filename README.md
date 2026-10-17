@@ -1,5 +1,11 @@
 # Nonogram
 
+> Written with [Claude](https://claude.ai), Anthropic's AI assistant — the game, the puzzle maker and this README.
+
+**Play it:** https://bburns.github.io/nonogram/
+
+![Nine Lives on a phone, partway through the 15×15 sitting cat](screenshot.png)
+
 **Nine Lives** — a nonogram (picross) puzzle game of pixel cats, in one self-contained HTML file.
 
 Open `index.html` in a browser. No build, no server, no dependencies beyond two Google fonts.
