@@ -33,24 +33,7 @@ Silhouettes, icons and bold shapes on a plain background turn out best. A busy p
 
 ## Picking pictures
 
-`src/rank.js` scores pictures for how good a nonogram they'd make and prints them best first. It's the nonogram version of the jigsaw project's ranker and takes the same options. Run `pnpm install` once, then:
-
-```
-pnpm rank <files or folders...> [--size 15] [--html FILE] [--list FILE] [--exclude NAME] [--sample N] [--stored] [--json] [--top N]
-```
-
-Each picture is turned into a puzzle exactly as `make.html` would, with the same code (`picture.js`), and the score is a weighted geometric mean of six parts:
-
-- **shape**: a subject clear of a plain background, in a few solid pieces that aren't just a block. This is what separates a silhouette from a photo with big dark areas.
-- **clarity**: how cleanly the picture splits into light and dark.
-- **clean**: how many squares are mostly one side or the other at full size, and how few lone specks there are. Line art and text fail here — every square is half ink.
-- **faithful**: how few squares had to change to make it solvable.
-- **balance**: filled share near half.
-- **interest**: more than one run per line. A plain blob is fine but easy.
-
-Icons, logos and clip art score 80–90. The best photos reach the high 70s. `--html` writes a page of thumbnails where clicking a picture flips it to the puzzle it makes, with the rows to paste into `index.html`.
-
-`src/score.js` stores scores in each folder's `.props.yaml` under a `nonogram` group, beside the jigsaw's `puzzle` group, and `rank.js --stored` ranks from those without opening the pictures. Both work like the jigsaw versions, including `folders.txt`. `pnpm best` writes `out/best.html`.
+`../picscorer` ranks folders of pictures for how good a nonogram they'd make, using `scorer.js` here. That file is a thin wrapper over `picture.js`, so a picture scores exactly as `make.html` would make it. The score's six parts are explained at the top of the quality section in `picture.js`.
 
 ## Controls
 
