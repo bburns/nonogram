@@ -1,8 +1,8 @@
-/* ══ for picscorer ════════════════════════════════════════════════════
-   What ../picscorer needs to score pictures for this game, rank them
+/* ══ for picscore ═════════════════════════════════════════════════════
+   What ../picscore needs to score pictures for this game, rank them
    and draw its gallery. The work is in picture.js, shared with
    make.html, so a picture scores exactly as the page would make it.
-   See picscorer's README for the shape of this interface;
+   See picscore's README for the shape of this interface;
    puzzle/scorer.js is the other example.                              */
 
 import "./picture.js"
