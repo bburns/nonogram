@@ -208,16 +208,22 @@ el("copy").onclick = () => navigator.clipboard.writeText(code()).then(() => { el
 
 function open(file) {
   if (!file) return;
-  const url = URL.createObjectURL(file);
+  openAddress(URL.createObjectURL(file), file.name);
+}
+function openAddress(url, filename) {
   const im = new Image();
   im.onload = () => {
     img = im;
-    el("name").value = file.name.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ");
+    el("name").value = filename.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ").trim().slice(0, 40);
     el("work").hidden = false;
     prepare();
   };
   im.src = url;
 }
+// ?pic=<address>&name=<name> opens that picture straight away, which is
+// how picscore's chooser hands one over.
+const params = new URLSearchParams(location.search);
+if (params.get("pic")) openAddress(params.get("pic"), params.get("name") || "My picture");
 el("file").onchange = e => open(e.target.files[0]);
 const drop = el("drop");
 drop.addEventListener("dragover", e => { e.preventDefault(); drop.classList.add("over"); });

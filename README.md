@@ -33,7 +33,7 @@ Silhouettes, icons and bold shapes on a plain background turn out best. A busy p
 
 ## Picking pictures
 
-`../picscore` ranks folders of pictures for how good a nonogram they'd make, using `scorer.js` here. That file is a thin wrapper over `picture.js`, so a picture scores exactly as `make.html` would make it. The score's six parts are explained at the top of the quality section in `picture.js`.
+`../picscore` ranks folders of pictures for how good a nonogram they'd make, using `scorer.js` here. That file is a thin wrapper over `picture.js`, so a picture scores exactly as `make.html` would make it. The score's six parts are explained at the top of the quality section in `picture.js`. Its chooser page opens a picture here with `make.html?pic=<address>&name=<name>`.
 
 ## Controls
 
