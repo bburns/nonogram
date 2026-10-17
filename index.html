@@ -11,9 +11,10 @@
   :root{
     --bg:#141a1d;
     --panel:#1b2326;
-    --line:#2a3538;
-    --line-hard:#41545a;
-    --bone:#f2ede3;
+    --line:#34454a;
+    --line-hard:#6a868e;
+    --bone:#e9e3d6;
+    --clue:#d2ccbf;
     --muted:#7a8a90;
     --dim:#4c5c62;
     --gold:#e8b54b;
@@ -69,12 +70,13 @@
   .col-clues{display:grid;grid-template-columns:repeat(var(--n),var(--cell))}
   .col-clues > div{
     display:flex;flex-direction:column;justify-content:flex-end;align-items:center;
-    padding-bottom:5px;color:var(--muted);font-size:calc(var(--cell) * .48);line-height:1.15;
+    padding-bottom:5px;color:var(--clue);font-size:max(12px, calc(var(--cell) * .58));line-height:1.15;
   }
+  .col-clues span{letter-spacing:-.1em;margin-right:-.1em}
   .row-clues{display:grid;grid-template-rows:repeat(var(--n),var(--cell))}
   .row-clues > div{
     display:flex;justify-content:flex-end;align-items:center;gap:.45em;
-    padding-right:7px;color:var(--muted);font-size:calc(var(--cell) * .48);
+    padding-right:7px;color:var(--clue);font-size:max(12px, calc(var(--cell) * .58));
   }
   .col-clues > div.done, .row-clues > div.done{color:var(--dim)}
   .col-clues > div.hl, .row-clues > div.hl{color:var(--gold)}
@@ -102,8 +104,8 @@
   .cell.off::before{transform:rotate(45deg)}
   .cell.off::after{transform:rotate(-45deg)}
   .cell:focus-visible{outline:2px solid var(--gold);z-index:3}
-  .crosshair{position:absolute;pointer-events:none;background:rgba(232,181,75,.10);display:none}
-  .board.fine .crosshair{display:block}
+  .crosshair{position:absolute;pointer-events:none;background:rgba(232,181,75,.10)}
+  .crosshair[hidden]{display:none}
 
   .board.solved .cells{border-color:var(--gold);background:#111618}
   .board.solved .cell{border-color:transparent}
@@ -243,9 +245,19 @@ const boardEl = el("board"), cellsEl = el("cells"), rowCluesEl = el("rowClues"),
       colCluesEl = el("colClues"), pickerEl = el("picker"), statusEl = el("status"),
       clockEl = el("clock"), hlRow = el("hlRow"), hlCol = el("hlCol");
 
-const store = (typeof window !== "undefined" && window.storage) ? window.storage : null;
+// window.storage inside claude.ai; localStorage everywhere else, behind the same async get/set shape
+const local = (() => {
+  try {
+    localStorage.setItem("nonogram:probe", "1"); localStorage.removeItem("nonogram:probe");
+    return {
+      get: async k => { const v = localStorage.getItem(k); return v == null ? null : { value: v }; },
+      set: async (k, v) => localStorage.setItem(k, v)
+    };
+  } catch (err) { return null; }
+})();
+const store = window.storage || local;
 let records = {};                      // name -> seconds
-const progress = new Map();            // name -> state grid (this session)
+const progress = new Map();            // name -> state grid
 
 let P, N, solution, rowClues, colClues, state, cellNodes;
 let mode = 1, drag = null, undoStack = [], solved = false;
@@ -258,7 +270,8 @@ function load(index) {
   rowClues = solution.map(clueOf);
   colClues = Array.from({ length: N }, (_, j) => clueOf(solution.map(r => r[j])));
 
-  state = progress.get(P.name) || Array.from({ length: N }, () => new Array(N).fill(0));
+  const saved = progress.get(P.name);
+  state = (saved && saved.length === N) ? saved : Array.from({ length: N }, () => new Array(N).fill(0));
   progress.set(P.name, state);
 
   undoStack = [];
@@ -269,6 +282,7 @@ function load(index) {
   boardEl.classList.remove("solved");
   statusEl.innerHTML = "";
   focusI = focusJ = 0;
+  hlRow.hidden = hlCol.hidden = true;
 
   build();
   layout();
@@ -314,11 +328,11 @@ function layout() {
   const maxRow = Math.max(...rowClues.map(c => c.length));
   const maxCol = Math.max(...colClues.map(c => c.length));
   const avail = Math.min(document.querySelector(".wrap").clientWidth, 720) - 4;
-  let cell = Math.floor(avail / (N + maxRow * 0.78));
-  cell = Math.max(17, Math.min(40, cell));
+  let cell = Math.floor(avail / (N + maxRow * 0.9));
+  cell = Math.max(20, Math.min(44, cell));
   boardEl.style.setProperty("--cell", cell + "px");
-  boardEl.style.setProperty("--gutter", Math.ceil(cell * 0.62 * maxRow + 8) + "px");
-  boardEl.style.setProperty("--colgutter", Math.ceil(cell * 0.66 * maxCol + 8) + "px");
+  boardEl.style.setProperty("--gutter", Math.ceil(cell * 0.72 * maxRow + 10) + "px");
+  boardEl.style.setProperty("--colgutter", Math.ceil(cell * 0.7 * maxCol + 10) + "px");
   hlRow.style.height = cell + "px"; hlRow.style.width = cell * N + "px";
   hlCol.style.width = cell + "px";  hlCol.style.height = cell * N + "px";
 }
@@ -336,6 +350,7 @@ function setCell(i, j, v) {
   if (solved || state[i][j] === v) return false;
   state[i][j] = v;
   draw(i, j);
+  saveProgress();
   return true;
 }
 
@@ -366,7 +381,7 @@ function finish(silent) {
       (best != null && seconds >= best ? ` · best ${fmt(best)}` : ""));
   drawPicker();
 }
-function setCellForce(i, j, v) { state[i][j] = v; draw(i, j); }
+function setCellForce(i, j, v) { state[i][j] = v; draw(i, j); saveProgress(); }
 
 /* ---- input ---- */
 cellsEl.addEventListener("contextmenu", e => e.preventDefault());
@@ -408,6 +423,7 @@ function apply(i, j) {
 
 function moveCrosshair(i, j) {
   const cell = parseFloat(getComputedStyle(boardEl).getPropertyValue("--cell"));
+  hlRow.hidden = hlCol.hidden = false;
   hlRow.style.transform = `translateY(${i * cell}px)`;
   hlCol.style.transform = `translateX(${j * cell}px)`;
   [...rowCluesEl.children].forEach((d, k) => d.classList.toggle("hl", k === i));
@@ -417,7 +433,6 @@ function clearCrosshair() {
   [...rowCluesEl.children].forEach(d => d.classList.remove("hl"));
   [...colCluesEl.children].forEach(d => d.classList.remove("hl"));
 }
-if (window.matchMedia("(pointer:fine)").matches) boardEl.classList.add("fine");
 
 document.addEventListener("keydown", e => {
   if (e.target.closest("button")) return;
@@ -502,7 +517,7 @@ function drawPicker() {
     const n = p.rows.length;
     b.innerHTML = `${p.name} <span style="opacity:.6">${n}×${n}</span>` +
       (records[p.name] != null ? `<span class="dot">✦</span>` : "");
-    b.onclick = () => { current = k; load(k); };
+    b.onclick = () => { current = k; load(k); saveProgress(); };
     pickerEl.appendChild(b);
   });
 }
@@ -511,14 +526,33 @@ async function save() {
   if (!store) return;
   try { await store.set("nonogram:records", JSON.stringify(records)); } catch (err) { /* offline is fine */ }
 }
+// a drag touches many cells; write once per frame, not once per cell
+let progressQueued = false;
+function saveProgress() {
+  if (!store || progressQueued) return;
+  progressQueued = true;
+  requestAnimationFrame(async () => {
+    progressQueued = false;
+    const out = { current };
+    for (const [name, grid] of progress) out[name] = grid.map(r => r.join("")).join("/");
+    try { await store.set("nonogram:progress", JSON.stringify(out)); } catch (err) { /* offline is fine */ }
+  });
+}
 async function init() {
   if (store) {
     try {
       const r = await store.get("nonogram:records");
       if (r && r.value) records = JSON.parse(r.value);
     } catch (err) { records = {}; }
+    try {
+      const r = await store.get("nonogram:progress");
+      const p = r && r.value ? JSON.parse(r.value) : {};
+      for (const [name, s] of Object.entries(p))
+        if (typeof s === "string") progress.set(name, s.split("/").map(row => [...row].map(Number)));
+      if (PUZZLES[p.current]) current = p.current;
+    } catch (err) { /* start fresh */ }
   }
-  load(0);
+  load(current);
 }
 
 window.addEventListener("resize", () => { layout(); });

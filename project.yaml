@@ -16,15 +16,6 @@ children:
       Open index.html straight from disk. Check drag-painting, right-click
       to mark, the hint button and the win animation on each puzzle.
 
-  - title: persist best times outside the artifact runtime
-    priority: 0.5
-    created: 2026-09-25
-    contents: >
-      The game reads best times from window.storage, which only exists
-      inside claude.ai. Opened from disk it falls back to in-memory, so
-      records vanish on reload. Swap in localStorage behind the same
-      get/set shape at the `store` binding.
-
   - title: draw more cats
     priority: 0.3
     created: 2026-09-25

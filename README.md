@@ -31,7 +31,9 @@ The grids are hand-drawn rather than downsampled from photographs. A real photo 
 
 Win detection compares the clues your grid generates against the puzzle's clues, rather than against the stored solution — so an alternate valid solution still counts as solved.
 
-Best times are read and written through `window.storage`, which exists only inside the claude.ai artifact runtime. Opened from disk the game degrades silently to in-memory, so records are lost on reload. See `project.yaml` for the task to move this to `localStorage`.
+Best times and in-progress grids are saved through `window.storage` inside claude.ai, and `localStorage` everywhere else, so a half-finished puzzle survives a reload.
+
+Puzzles stop at 15×15 on purpose. On a phone a 20×20 grid shrinks the cells and clues until they strain the eyes, which is the problem with most picross apps. Clues are drawn large and bright, and the current row and column are highlighted under your finger.
 
 ## Origin
 
