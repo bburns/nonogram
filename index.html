@@ -176,7 +176,8 @@
 
   <p class="help">
     Drag to paint a run. Right-click paints ✕.<br>
-    Arrow keys move, <kbd>space</kbd> fills, <kbd>x</kbd> marks.
+    Arrow keys move, <kbd>space</kbd> fills, <kbd>x</kbd> marks.<br>
+    <a href="make.html" style="color:var(--gold)">Make a puzzle from a picture</a>
   </p>
 </div>
 
@@ -533,12 +534,13 @@ function saveProgress() {
   progressQueued = true;
   requestAnimationFrame(async () => {
     progressQueued = false;
-    const out = { current };
+    const out = { "@current": PUZZLES[current].name };
     for (const [name, grid] of progress) out[name] = grid.map(r => r.join("")).join("/");
     try { await store.set("nonogram:progress", JSON.stringify(out)); } catch (err) { /* offline is fine */ }
   });
 }
 async function init() {
+  let lastName = null;
   if (store) {
     try {
       const r = await store.get("nonogram:records");
@@ -548,10 +550,18 @@ async function init() {
       const r = await store.get("nonogram:progress");
       const p = r && r.value ? JSON.parse(r.value) : {};
       for (const [name, s] of Object.entries(p))
-        if (typeof s === "string") progress.set(name, s.split("/").map(row => [...row].map(Number)));
-      if (PUZZLES[p.current]) current = p.current;
+        if (name !== "@current" && typeof s === "string") progress.set(name, s.split("/").map(row => [...row].map(Number)));
+      lastName = p["@current"];
     } catch (err) { /* start fresh */ }
   }
+  // puzzles made in make.html
+  try {
+    for (const p of JSON.parse(localStorage.getItem("nonogram:custom")) || [])
+      if (p && p.name && Array.isArray(p.rows) && !PUZZLES.some(q => q.name === p.name)) PUZZLES.push(p);
+  } catch (err) { /* none */ }
+  const asked = decodeURIComponent(location.hash.slice(1));
+  if (asked) history.replaceState(null, "", location.pathname);
+  current = Math.max(0, PUZZLES.findIndex(p => p.name === (asked || lastName)));
   load(current);
 }
 

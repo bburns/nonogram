@@ -17,7 +17,13 @@ Four cats live in the `PUZZLES` array near the top of the script:
 
 Each is an array of `#`/`.` strings; the row and column clues are derived at load, not stored. Adding a cat is a matter of appending N strings of length N.
 
-The grids are hand-drawn rather than downsampled from photographs. A real photo thresholded to 10×10 becomes noise, and noise produces clue sets that are not logically solvable — nonogram art is always authored.
+## Puzzles from pictures
+
+`make.html` turns a picture into a puzzle. Drop in a JPEG or PNG, pick a size, and adjust the threshold. **Add to the game** saves it in the browser and opens it in `index.html`; **Copy as code** gives the `PUZZLES` entry to paste in.
+
+It crops to the subject, shrinks it by averaging, and splits light from dark at an automatic threshold. A thresholded picture usually can't be solved without guessing, so it then runs a solver that works the way a person does, one row or column at a time. Where the solver gets stuck, it changes the square that helps most, preferring squares whose shade was close to the threshold anyway. Changed squares show in gold. A finished puzzle has one answer and needs no guessing.
+
+Silhouettes, icons and bold shapes on a plain background turn out best. A busy photo still comes out solvable, but at 15×15 it rarely looks like anything.
 
 ## Controls
 

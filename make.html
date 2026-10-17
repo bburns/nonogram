@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nine Lives — make a puzzle from a picture</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#141a1d; --panel:#1b2326; --line:#34454a; --line-hard:#6a868e;
+    --bone:#e9e3d6; --clue:#d2ccbf; --muted:#7a8a90; --dim:#4c5c62; --gold:#e8b54b;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;background:var(--bg);color:var(--bone);
+    font-family:"DM Mono",ui-monospace,monospace;-webkit-font-smoothing:antialiased;
+    display:flex;justify-content:center;padding:18px 12px 40px;
+  }
+  .wrap{width:100%;max-width:760px}
+  h1{font-family:"Bricolage Grotesque",system-ui,sans-serif;font-weight:700;font-size:26px;letter-spacing:-.02em;margin:0 0 4px}
+  a{color:var(--gold)}
+  .tag{color:var(--muted);font-size:12.5px;margin:0 0 16px}
+  .drop{
+    display:block;line-height:1.7;border:1px dashed var(--line-hard);background:var(--panel);padding:22px;text-align:center;
+    color:var(--muted);font-size:13px;cursor:pointer;
+  }
+  .drop.over{border-color:var(--gold);color:var(--bone)}
+  .controls{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;margin:16px 0;font-size:13px;color:var(--clue)}
+  .controls label{display:flex;align-items:center;gap:6px}
+  input[type=range]{accent-color:var(--gold);width:120px}
+  input[type=text]{font:inherit;color:var(--bone);background:var(--panel);border:1px solid var(--line);padding:7px 9px;width:150px}
+  select{font:inherit;color:var(--bone);background:var(--panel);border:1px solid var(--line);padding:6px}
+  button{font:inherit;font-size:13px;color:var(--bone);background:var(--panel);border:1px solid var(--line);padding:9px 12px;cursor:pointer;line-height:1}
+  button:hover{border-color:var(--line-hard)}
+  button.primary{background:var(--bone);color:#141a1d;border-color:var(--bone)}
+  .views{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start}
+  .views figure{margin:0}
+  .views figcaption{color:var(--muted);font-size:12px;margin-top:6px}
+  canvas{display:block;image-rendering:pixelated;background:var(--panel)}
+  .verdict{font-size:13.5px;color:var(--clue);margin:14px 0;line-height:1.6}
+  .verdict strong{font-family:"Bricolage Grotesque",system-ui,sans-serif;font-size:19px;color:var(--gold);display:block}
+  pre{background:var(--panel);border:1px solid var(--line);padding:10px;font-size:12px;overflow:auto;color:var(--clue)}
+  .saved{list-style:none;padding:0;margin:8px 0;font-size:13px}
+  .saved li{display:flex;gap:10px;align-items:center;padding:4px 0}
+  .saved button{padding:5px 8px;font-size:12px}
+  [hidden]{display:none!important}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Make a puzzle</h1>
+  <p class="tag">from a picture · back to <a href="index.html">the game</a></p>
+
+  <label class="drop" id="drop">
+    Drop a picture here, or tap to choose one.<br>
+    Silhouettes, icons and bold shapes on a plain background work best.
+    <input type="file" id="file" accept="image/*" hidden>
+  </label>
+
+  <div id="work" hidden>
+    <div class="controls">
+      <label>Size
+        <select id="size">
+          <option>5</option><option>10</option><option selected>15</option><option>20</option>
+        </select>
+      </label>
+      <label>Threshold <input type="range" id="thr" min="0" max="255"></label>
+      <label><input type="checkbox" id="invert"> Invert</label>
+      <label><input type="checkbox" id="repair" checked> Make solvable</label>
+    </div>
+
+    <div class="views">
+      <figure><canvas id="srcView"></canvas><figcaption>cropped picture</figcaption></figure>
+      <figure><canvas id="grayView"></canvas><figcaption>shrunk</figcaption></figure>
+      <figure><canvas id="outView"></canvas><figcaption>puzzle · <span style="color:var(--gold)">gold</span> = changed to make it solvable</figcaption></figure>
+    </div>
+
+    <div class="verdict" id="verdict"></div>
+
+    <div class="controls">
+      <input type="text" id="name" placeholder="Name it">
+      <button class="primary" id="play">Add to the game</button>
+      <button id="copy">Copy as code</button>
+    </div>
+    <pre id="code"></pre>
+  </div>
+
+  <div id="savedBox" hidden>
+    <p class="tag" style="margin:24px 0 0">Your puzzles</p>
+    <ul class="saved" id="saved"></ul>
+  </div>
+</div>
+
+<script>
+/* ---- line solver ----
+   A line is an array of -1 (unknown), 0 (empty), 1 (filled). solveLine returns
+   the line with every cell that is the same in all arrangements of the clue
+   filled in, or null if no arrangement fits. Solving rows and columns in turn
+   until nothing changes is how a person solves without guessing, so a puzzle
+   this finishes is fair and has exactly one answer. */
+function solveLine(clue, line) {
+  const b = clue[0] === 0 ? [] : clue, m = b.length, n = line.length;
+  // fits[k][i]: blocks k.. can be placed in cells i..
+  const fits = Array.from({ length: m + 1 }, () => new Array(n + 2).fill(false));
+  const noFill = new Array(n + 1).fill(true);   // no forced fill in i..n-1
+  for (let i = n - 1; i >= 0; i--) noFill[i] = noFill[i + 1] && line[i] !== 1;
+  const noGap = new Array(n + 1).fill(0);        // run of non-empty cells starting at i
+  for (let i = n - 1; i >= 0; i--) noGap[i] = line[i] === 0 ? 0 : noGap[i + 1] + 1;
+  for (let i = 0; i <= n; i++) fits[m][i] = noFill[i];
+  for (let k = m - 1; k >= 0; k--) {
+    for (let i = n; i >= 0; i--) {
+      let ok = i < n && line[i] !== 1 && fits[k][i + 1];
+      const e = i + b[k];
+      if (!ok && e <= n && noGap[i] >= b[k]) {
+        if (e === n) ok = k === m - 1;
+        else ok = line[e] !== 1 && fits[k + 1][e + 1];
+      }
+      fits[k][i] = ok;
+    }
+  }
+  if (!fits[0][0]) return null;
+  // walk forward through reachable states, recording what each cell can be
+  const can0 = new Array(n).fill(false), can1 = new Array(n).fill(false);
+  const seen = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(false));
+  const stack = [[0, 0]]; seen[0][0] = true;
+  while (stack.length) {
+    const [k, i] = stack.pop();
+    if (k === m) { for (let t = i; t < n; t++) can0[t] = true; continue; }
+    if (i < n && line[i] !== 1 && fits[k][i + 1]) {
+      can0[i] = true;
+      if (!seen[k][i + 1]) { seen[k][i + 1] = true; stack.push([k, i + 1]); }
+    }
+    const e = i + b[k];
+    if (e <= n && noGap[i] >= b[k]) {
+      if (e === n && k === m - 1) {
+        for (let t = i; t < e; t++) can1[t] = true;
+      } else if (e < n && line[e] !== 1 && fits[k + 1][e + 1]) {
+        for (let t = i; t < e; t++) can1[t] = true;
+        can0[e] = true;
+        if (!seen[k + 1][e + 1]) { seen[k + 1][e + 1] = true; stack.push([k + 1, e + 1]); }
+      }
+    }
+  }
+  return line.map((v, t) => can0[t] && can1[t] ? -1 : can1[t] ? 1 : 0);
+}
+
+function clueOf(arr) {
+  const out = []; let n = 0;
+  for (const v of arr) { if (v === 1) n++; else if (n) { out.push(n); n = 0; } }
+  if (n) out.push(n);
+  return out.length ? out : [0];
+}
+
+// returns the grid as far as line logic gets, with -1 left where it is stuck
+function solve(rowClues, colClues) {
+  const R = rowClues.length, C = colClues.length;
+  const g = Array.from({ length: R }, () => new Array(C).fill(-1));
+  let dirtyR = new Set(g.keys()), dirtyC = new Set(colClues.keys());
+  while (dirtyR.size || dirtyC.size) {
+    for (const i of dirtyR) {
+      const out = solveLine(rowClues[i], g[i]);
+      if (!out) return null;
+      out.forEach((v, j) => { if (v !== g[i][j]) { g[i][j] = v; dirtyC.add(j); } });
+    }
+    dirtyR = new Set();
+    for (const j of dirtyC) {
+      const out = solveLine(colClues[j], g.map(r => r[j]));
+      if (!out) return null;
+      out.forEach((v, i) => { if (v !== g[i][j]) { g[i][j] = v; dirtyR.add(i); } });
+    }
+    dirtyC = new Set();
+  }
+  return g;
+}
+
+const unknowns = g => g.reduce((s, r) => s + r.filter(v => v === -1).length, 0);
+const cluesOf = T => [T.map(clueOf), T[0].map((_, j) => clueOf(T.map(r => r[j])))];
+
+/* ---- making it solvable ----
+   Greedy: while line logic gets stuck, try flipping each cell it is stuck on and
+   keep the flip that unsticks the most, preferring cells whose shade was close
+   to the threshold anyway, so the picture changes as little as possible. */
+function makeSolvable(T, gray, thr) {
+  T = T.map(r => r.slice());
+  const flipped = new Set();
+  let g = solve(...cluesOf(T)), left = unknowns(g);
+  for (let step = 0; left && step < 60; step++) {
+    let best = null;
+    for (let i = 0; i < T.length; i++) for (let j = 0; j < T.length; j++) {
+      if (g[i][j] !== -1) continue;
+      T[i][j] ^= 1;
+      const s = unknowns(solve(...cluesOf(T)));
+      T[i][j] ^= 1;
+      const cost = Math.abs(gray[i][j] - thr);
+      if (!best || s < best.s || (s === best.s && cost < best.cost)) best = { i, j, s, cost };
+    }
+    T[best.i][best.j] ^= 1;
+    const key = best.i + "," + best.j;
+    flipped.has(key) ? flipped.delete(key) : flipped.add(key);
+    g = solve(...cluesOf(T)); left = unknowns(g);
+  }
+  return { T, flipped, solved: left === 0 };
+}
+
+/* ---- picture to grid ---- */
+const el = id => document.getElementById(id);
+let img = null;
+
+function readPixels(image, w, h) {
+  const c = document.createElement("canvas");
+  c.width = w; c.height = h;
+  const x = c.getContext("2d");
+  x.fillStyle = "#fff"; x.fillRect(0, 0, w, h);      // transparent PNGs go on white
+  x.drawImage(image, 0, 0, w, h);
+  const d = x.getImageData(0, 0, w, h).data;
+  const lum = new Float32Array(w * h);
+  for (let p = 0; p < w * h; p++) lum[p] = 0.299 * d[p * 4] + 0.587 * d[p * 4 + 1] + 0.114 * d[p * 4 + 2];
+  return lum;
+}
+
+// crop away border rows/columns that look like the background
+function cropBox(lum, w, h) {
+  const edge = [];
+  for (let x = 0; x < w; x++) edge.push(lum[x], lum[(h - 1) * w + x]);
+  for (let y = 0; y < h; y++) edge.push(lum[y * w], lum[y * w + w - 1]);
+  edge.sort((a, b) => a - b);
+  const bg = edge[edge.length >> 1];
+  const busy = (x0, y0, x1, y1) => {
+    let n = 0, t = 0;
+    for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) { t++; if (Math.abs(lum[y * w + x] - bg) > 40) n++; }
+    return n / t > 0.01;
+  };
+  let top = 0, bot = h, lef = 0, rig = w;
+  while (top < bot - 1 && !busy(0, top, w, top + 1)) top++;
+  while (bot > top + 1 && !busy(0, bot - 1, w, bot)) bot--;
+  while (lef < rig - 1 && !busy(lef, top, lef + 1, bot)) lef++;
+  while (rig > lef + 1 && !busy(rig - 1, top, rig, bot)) rig--;
+  return { bg, box: [lef, top, rig, bot] };
+}
+
+function otsu(values) {
+  const hist = new Array(256).fill(0);
+  values.forEach(v => hist[Math.max(0, Math.min(255, Math.round(v)))]++);
+  const total = values.length;
+  let sum = 0; for (let t = 0; t < 256; t++) sum += t * hist[t];
+  let sumB = 0, wB = 0, best = 0, thr = 128;
+  for (let t = 0; t < 256; t++) {
+    wB += hist[t]; if (!wB) continue;
+    const wF = total - wB; if (!wF) break;
+    sumB += t * hist[t];
+    const mB = sumB / wB, mF = (sum - sumB) / wF, between = wB * wF * (mB - mF) ** 2;
+    if (between > best) { best = between; thr = t; }
+  }
+  return thr;
+}
+
+let shrunk = null;   // { N, gray[][], bg }
+
+function prepare() {
+  const N = +el("size").value;
+  const W = 400, H = Math.round(400 * img.height / img.width);
+  const lum = readPixels(img, W, H);
+  const { bg, box: [x0, y0, x1, y1] } = cropBox(lum, W, H);
+  // square the crop around the subject, padding with background
+  const side = Math.max(x1 - x0, y1 - y0);
+  const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+  const sx = cx - side / 2, sy = cy - side / 2;
+  // average every source pixel into its cell
+  const sum = Array.from({ length: N }, () => new Array(N).fill(0));
+  const cnt = Array.from({ length: N }, () => new Array(N).fill(0));
+  for (let y = 0; y < Math.ceil(side); y++) for (let x = 0; x < Math.ceil(side); x++) {
+    const px = Math.floor(sx + x), py = Math.floor(sy + y);
+    const v = (px >= 0 && py >= 0 && px < W && py < H) ? lum[py * W + px] : bg;
+    const i = Math.min(N - 1, Math.floor(y * N / side)), j = Math.min(N - 1, Math.floor(x * N / side));
+    sum[i][j] += v; cnt[i][j]++;
+  }
+  const gray = sum.map((r, i) => r.map((s, j) => s / cnt[i][j]));
+  shrunk = { N, gray, bg };
+
+  const sv = el("srcView"); sv.width = sv.height = 180;
+  const sc = sv.getContext("2d");
+  sc.fillStyle = "#fff"; sc.fillRect(0, 0, 180, 180);
+  sc.drawImage(img, sx * img.width / W, sy * img.width / W, side * img.width / W, side * img.width / W, 0, 0, 180, 180);
+
+  el("thr").value = otsu(gray.flat());
+  el("invert").checked = bg < 128;        // a dark background usually means a light subject
+  render();
+}
+
+function render() {
+  const { N, gray } = shrunk;
+  const thr = +el("thr").value, inv = el("invert").checked;
+  const T0 = gray.map(r => r.map(v => (inv ? v > thr : v < thr) ? 1 : 0));
+  const res = el("repair").checked ? makeSolvable(T0, gray, thr) : { T: T0, flipped: new Set(), solved: unknowns(solve(...cluesOf(T0))) === 0 };
+  shrunk.T = res.T;
+
+  const s = Math.floor(180 / N);
+  const gv = el("grayView"); gv.width = gv.height = s * N;
+  const gc = gv.getContext("2d");
+  gray.forEach((r, i) => r.forEach((v, j) => { gc.fillStyle = `rgb(${v},${v},${v})`; gc.fillRect(j * s, i * s, s, s); }));
+
+  const ov = el("outView"); ov.width = ov.height = s * N;
+  const oc = ov.getContext("2d");
+  oc.fillStyle = "#1b2326"; oc.fillRect(0, 0, s * N, s * N);
+  res.T.forEach((r, i) => r.forEach((v, j) => {
+    const changed = res.flipped.has(i + "," + j);
+    if (v) { oc.fillStyle = changed ? "#e8b54b" : "#e9e3d6"; oc.fillRect(j * s, i * s, s, s); }
+    else if (changed) { oc.strokeStyle = "#e8b54b"; oc.lineWidth = 2; oc.strokeRect(j * s + 2, i * s + 2, s - 4, s - 4); }
+  }));
+
+  const filled = res.T.flat().filter(v => v).length / (N * N);
+  let say;
+  if (!res.solved) say = `<strong>Not solvable yet</strong>It needs guessing to finish. Turn on “Make solvable”, or try another threshold.`;
+  else if (filled < 0.15 || filled > 0.85) say = `<strong>Solvable, but thin</strong>${Math.round(filled * 100)}% filled — try the threshold or Invert.`;
+  else say = `<strong>Solvable</strong>One answer, no guessing. ${Math.round(filled * 100)}% filled` +
+    (res.flipped.size ? `, ${res.flipped.size} square${res.flipped.size > 1 ? "s" : ""} changed from the picture.` : `, nothing changed from the picture.`);
+  el("verdict").innerHTML = say;
+  shrunk.solved = res.solved;
+  el("code").textContent = code();
+}
+
+function puzzleName() { return el("name").value.trim() || "My picture"; }
+function code() {
+  const rows = shrunk.T.map(r => r.map(v => v ? "#" : ".").join(""));
+  return `  { name:${JSON.stringify(puzzleName())}, rows:[\n` + rows.map(r => `    "${r}"`).join(",\n") + `\n  ]},`;
+}
+
+/* ---- saved puzzles, shared with the game through localStorage ---- */
+const KEY = "nonogram:custom";
+const loadSaved = () => { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch (e) { return []; } };
+function drawSaved() {
+  const list = loadSaved();
+  el("savedBox").hidden = !list.length;
+  el("saved").innerHTML = "";
+  list.forEach((p, k) => {
+    const li = document.createElement("li");
+    li.innerHTML = `<span>${p.name.replace(/</g, "&lt;")} <span style="color:var(--muted)">${p.rows.length}×${p.rows.length}</span></span>`;
+    const del = document.createElement("button");
+    del.textContent = "Remove";
+    del.onclick = () => { const l = loadSaved(); l.splice(k, 1); localStorage.setItem(KEY, JSON.stringify(l)); drawSaved(); };
+    li.appendChild(del);
+    el("saved").appendChild(li);
+  });
+}
+
+el("play").onclick = () => {
+  if (!shrunk.solved && !confirm("This one needs guessing to finish. Add it anyway?")) return;
+  const list = loadSaved().filter(p => p.name !== puzzleName());
+  list.push({ name: puzzleName(), rows: shrunk.T.map(r => r.map(v => v ? "#" : ".").join("")) });
+  localStorage.setItem(KEY, JSON.stringify(list));
+  // a remade puzzle with the same name starts fresh
+  for (const k of ["nonogram:progress", "nonogram:records"]) {
+    try { const o = JSON.parse(localStorage.getItem(k)); if (o) { delete o[puzzleName()]; localStorage.setItem(k, JSON.stringify(o)); } } catch (e) {}
+  }
+  location.href = "index.html#" + encodeURIComponent(puzzleName());
+};
+el("copy").onclick = () => navigator.clipboard.writeText(code()).then(() => { el("copy").textContent = "Copied"; setTimeout(() => el("copy").textContent = "Copy as code", 1200); });
+
+function open(file) {
+  if (!file) return;
+  const url = URL.createObjectURL(file);
+  const im = new Image();
+  im.onload = () => {
+    img = im;
+    el("name").value = file.name.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ");
+    el("work").hidden = false;
+    prepare();
+  };
+  im.src = url;
+}
+el("file").onchange = e => open(e.target.files[0]);
+const drop = el("drop");
+drop.addEventListener("dragover", e => { e.preventDefault(); drop.classList.add("over"); });
+drop.addEventListener("dragleave", () => drop.classList.remove("over"));
+drop.addEventListener("drop", e => { e.preventDefault(); drop.classList.remove("over"); open(e.dataTransfer.files[0]); });
+
+el("size").onchange = () => img && prepare();
+el("thr").oninput = () => shrunk && render();
+el("invert").onchange = () => shrunk && render();
+el("repair").onchange = () => shrunk && render();
+el("name").oninput = () => shrunk && (el("code").textContent = code());
+drawSaved();
+</script>
+</body>
+</html>
