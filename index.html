@@ -358,44 +358,44 @@ function setCell(i, j, v) {
   return true;
 }
 
-// Which of a line's clue numbers are pinned down. Walking in from each
-// end over crossed-out squares, a run of filled squares closed off by a
-// cross or the edge on both sides is the next block; if it's the right
-// length, its number is crossed out. A pass stops at the first blank
-// square, since past that a run could belong to another block. A line
-// whose filled squares match its clue has every number crossed out.
-function gotBlocks(clue, line) {
+// Where each block of a line sits in the solution, as [start, end).
+function spansOf(arr) {
+  const out = [];
+  arr.forEach((v, i) => {
+    if (v && (i === 0 || !arr[i - 1])) out.push([i, i + 1]);
+    else if (v) out[out.length - 1][1] = i + 1;
+  });
+  return out;
+}
+
+// Which of a line's clue numbers to cross off: a block counts as soon as
+// exactly its squares are filled, in the right place, with nothing filled
+// right next to it. Wrong fills never cross anything off. A line whose
+// filled squares match its clue has every number crossed off, as with an
+// alternate solution.
+function gotBlocks(clue, line, spans) {
   const got = clue.map(() => false);
   if (clue[0] === 0) return got;
   if (same(clueOf(line.map(v => v === 1 ? 1 : 0)), clue)) return got.fill(true);
-  const pass = (cells, order) => {
-    const n = cells.length;
-    let i = 0;
-    for (const k of order) {
-      while (i < n && cells[i] === 2) i++;
-      if (i >= n || cells[i] === 0) return;
-      let e = i;
-      while (e < n && cells[e] === 1) e++;
-      if (e < n && cells[e] !== 2) return;      // run not closed off yet
-      if (e - i !== clue[k]) return;
-      got[k] = true;
-      i = e;
-    }
-  };
-  pass(line, clue.map((_, k) => k));
-  pass([...line].reverse(), clue.map((_, k) => clue.length - 1 - k));
+  spans.forEach(([s, e], k) => {
+    let ok = (s === 0 || line[s - 1] !== 1) && (e === line.length || line[e] !== 1);
+    for (let t = s; ok && t < e; t++) ok = line[t] === 1;
+    got[k] = ok;
+  });
   return got;
 }
 
-function markClues(div, clue, line) {
-  const got = gotBlocks(clue, line);
+function markClues(div, clue, line, spans) {
+  const got = gotBlocks(clue, line, spans);
   div.classList.toggle("done", got.every(Boolean) && clue[0] !== 0);
   [...div.children].forEach((s, k) => s.classList.toggle("got", got[k]));
 }
 
 function checkLines() {
-  for (let i = 0; i < N; i++) markClues(rowCluesEl.children[i], rowClues[i], state[i]);
-  for (let j = 0; j < N; j++) markClues(colCluesEl.children[j], colClues[j], state.map(r => r[j]));
+  for (let i = 0; i < N; i++)
+    markClues(rowCluesEl.children[i], rowClues[i], state[i], spansOf(solution[i]));
+  for (let j = 0; j < N; j++)
+    markClues(colCluesEl.children[j], colClues[j], state.map(r => r[j]), spansOf(solution.map(r => r[j])));
 }
 
 function isSolved() {
