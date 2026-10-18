@@ -81,6 +81,9 @@
   .col-clues > div.done, .row-clues > div.done{color:var(--dim)}
   .col-clues > div.hl, .row-clues > div.hl{color:var(--gold)}
   .zero{color:var(--dim)}
+  .col-clues span.got, .row-clues span.got{
+    color:var(--dim);text-decoration:line-through;text-decoration-thickness:2px;
+  }
 
   .cells{
     position:relative;
@@ -355,11 +358,44 @@ function setCell(i, j, v) {
   return true;
 }
 
+// Which of a line's clue numbers are pinned down. Walking in from each
+// end over crossed-out squares, a run of filled squares closed off by a
+// cross or the edge on both sides is the next block; if it's the right
+// length, its number is crossed out. A pass stops at the first blank
+// square, since past that a run could belong to another block. A line
+// whose filled squares match its clue has every number crossed out.
+function gotBlocks(clue, line) {
+  const got = clue.map(() => false);
+  if (clue[0] === 0) return got;
+  if (same(clueOf(line.map(v => v === 1 ? 1 : 0)), clue)) return got.fill(true);
+  const pass = (cells, order) => {
+    const n = cells.length;
+    let i = 0;
+    for (const k of order) {
+      while (i < n && cells[i] === 2) i++;
+      if (i >= n || cells[i] === 0) return;
+      let e = i;
+      while (e < n && cells[e] === 1) e++;
+      if (e < n && cells[e] !== 2) return;      // run not closed off yet
+      if (e - i !== clue[k]) return;
+      got[k] = true;
+      i = e;
+    }
+  };
+  pass(line, clue.map((_, k) => k));
+  pass([...line].reverse(), clue.map((_, k) => clue.length - 1 - k));
+  return got;
+}
+
+function markClues(div, clue, line) {
+  const got = gotBlocks(clue, line);
+  div.classList.toggle("done", got.every(Boolean) && clue[0] !== 0);
+  [...div.children].forEach((s, k) => s.classList.toggle("got", got[k]));
+}
+
 function checkLines() {
-  for (let i = 0; i < N; i++)
-    rowCluesEl.children[i].classList.toggle("done", same(clueOf(state[i].map(v => v === 1 ? 1 : 0)), rowClues[i]));
-  for (let j = 0; j < N; j++)
-    colCluesEl.children[j].classList.toggle("done", same(clueOf(state.map(r => r[j] === 1 ? 1 : 0)), colClues[j]));
+  for (let i = 0; i < N; i++) markClues(rowCluesEl.children[i], rowClues[i], state[i]);
+  for (let j = 0; j < N; j++) markClues(colCluesEl.children[j], colClues[j], state.map(r => r[j]));
 }
 
 function isSolved() {
