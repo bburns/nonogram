@@ -37,7 +37,7 @@ Silhouettes, icons and bold shapes on a plain background turn out best. A busy p
 
 ## Controls
 
-- **Drag** to paint a run. The first cell of the stroke decides whether the whole stroke fills or erases.
+- **Drag** to paint a run. The first cell of the stroke decides whether the whole stroke fills or erases, and the stroke stays in the row or column it first moves along.
 - **Right-click** (or the Mark tool) to cross a square off.
 - **Arrow keys** move the cursor; **space** fills, **x** marks.
 - **Hint** fills one correct square and adds 30 seconds to the clock.

@@ -424,18 +424,30 @@ cellsEl.addEventListener("pointerdown", e => {
   if (undoStack.length > 40) undoStack.shift();
   const i = +c.dataset.i, j = +c.dataset.j;
   const want = (e.button === 2) ? 2 : mode;
-  drag = { target: state[i][j] === want ? 0 : want };
+  // a stroke sticks to the row or column it first moves along
+  drag = { target: state[i][j] === want ? 0 : want, i, j, x: e.clientX, y: e.clientY, axis: null };
   apply(i, j);
 });
 
 cellsEl.addEventListener("pointermove", e => {
-  const node = document.elementFromPoint(e.clientX, e.clientY);
-  const c = node && node.closest ? node.closest(".cell") : null;
-  if (c) {
-    const i = +c.dataset.i, j = +c.dataset.j;
-    if (drag) apply(i, j);
+  if (!drag) return;
+  const r = cellNodes[0][0].getBoundingClientRect();
+  const clamp = v => Math.max(0, Math.min(N - 1, v));
+  const i = clamp(Math.floor((e.clientY - r.top) / r.height));
+  const j = clamp(Math.floor((e.clientX - r.left) / r.width));
+  if (!drag.axis) {
+    if (i === drag.i && j === drag.j) return;
+    drag.axis = Math.abs(e.clientY - drag.y) > Math.abs(e.clientX - drag.x) ? "col" : "row";
   }
+  // fill every cell between the last one and here, so a fast swipe skips none
+  if (drag.axis === "row") for (const k of span(focusJ, j)) apply(drag.i, k);
+  else for (const k of span(focusI, i)) apply(k, drag.j);
 });
+function span(a, b) {
+  const step = b < a ? -1 : 1, out = [];
+  for (let k = a; k !== b + step; k += step) out.push(k);
+  return out;
+}
 window.addEventListener("pointerup", () => { drag = null; });
 
 function apply(i, j) {
