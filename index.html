@@ -79,7 +79,6 @@
     padding-right:7px;color:var(--clue);font-size:max(12px, calc(var(--cell) * .58));
   }
   .col-clues > div.done, .row-clues > div.done{color:var(--dim)}
-  .col-clues > div.hl, .row-clues > div.hl{color:var(--gold)}
   .zero{color:var(--dim)}
   .col-clues span.got, .row-clues span.got{
     color:var(--dim);text-decoration:line-through;text-decoration-thickness:2px;
@@ -102,18 +101,15 @@
   .cell:nth-child(n){outline-offset:-2px}
   .cell.on{background:var(--bone)}
   .cell.off::before,.cell.off::after{
-    content:"";position:absolute;left:28%;top:50%;width:44%;height:1.5px;background:var(--dim);
+    content:"";position:absolute;left:20%;top:calc(50% - 1px);width:60%;height:2px;background:#7d9097;
   }
   .cell.off::before{transform:rotate(45deg)}
   .cell.off::after{transform:rotate(-45deg)}
   .cell:focus-visible{outline:2px solid var(--gold);z-index:3}
-  .crosshair{position:absolute;pointer-events:none;background:rgba(232,181,75,.10)}
-  .crosshair[hidden]{display:none}
 
   .board.solved .cells{border-color:var(--gold);background:#111618}
   .board.solved .cell{border-color:transparent}
   .board.solved .cell.off::before,.board.solved .cell.off::after{opacity:0}
-  .board.solved .crosshair{display:none}
   .board.solved .cell.on{animation:pop .32s ease-out backwards;animation-delay:var(--d)}
   @keyframes pop{from{transform:scale(.25);opacity:0}to{transform:scale(1);opacity:1}}
 
@@ -160,8 +156,6 @@
     <div class="col-clues" id="colClues"></div>
     <div class="row-clues" id="rowClues"></div>
     <div class="cells" id="cells">
-      <div class="crosshair" id="hlRow"></div>
-      <div class="crosshair" id="hlCol"></div>
     </div>
   </div>
 
@@ -247,7 +241,7 @@ const same = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
 const el = id => document.getElementById(id);
 const boardEl = el("board"), cellsEl = el("cells"), rowCluesEl = el("rowClues"),
       colCluesEl = el("colClues"), pickerEl = el("picker"), statusEl = el("status"),
-      clockEl = el("clock"), hlRow = el("hlRow"), hlCol = el("hlCol");
+      clockEl = el("clock");
 
 // window.storage inside claude.ai; localStorage everywhere else, behind the same async get/set shape
 const local = (() => {
@@ -286,7 +280,6 @@ function load(index) {
   boardEl.classList.remove("solved");
   statusEl.innerHTML = "";
   focusI = focusJ = 0;
-  hlRow.hidden = hlCol.hidden = true;
 
   build();
   layout();
@@ -337,8 +330,6 @@ function layout() {
   boardEl.style.setProperty("--cell", cell + "px");
   boardEl.style.setProperty("--gutter", Math.ceil(cell * 0.72 * maxRow + 10) + "px");
   boardEl.style.setProperty("--colgutter", Math.ceil(cell * 0.7 * maxCol + 10) + "px");
-  hlRow.style.height = cell + "px"; hlRow.style.width = cell * N + "px";
-  hlCol.style.width = cell + "px";  hlCol.style.height = cell * N + "px";
 }
 
 function paintAll() {
@@ -442,11 +433,9 @@ cellsEl.addEventListener("pointermove", e => {
   const c = node && node.closest ? node.closest(".cell") : null;
   if (c) {
     const i = +c.dataset.i, j = +c.dataset.j;
-    moveCrosshair(i, j);
     if (drag) apply(i, j);
   }
 });
-cellsEl.addEventListener("pointerleave", () => { if (!drag) clearCrosshair(); });
 window.addEventListener("pointerup", () => { drag = null; });
 
 function apply(i, j) {
@@ -456,19 +445,6 @@ function apply(i, j) {
     if (isSolved()) finish(false);
   }
   focusI = i; focusJ = j;
-}
-
-function moveCrosshair(i, j) {
-  const cell = parseFloat(getComputedStyle(boardEl).getPropertyValue("--cell"));
-  hlRow.hidden = hlCol.hidden = false;
-  hlRow.style.transform = `translateY(${i * cell}px)`;
-  hlCol.style.transform = `translateX(${j * cell}px)`;
-  [...rowCluesEl.children].forEach((d, k) => d.classList.toggle("hl", k === i));
-  [...colCluesEl.children].forEach((d, k) => d.classList.toggle("hl", k === j));
-}
-function clearCrosshair() {
-  [...rowCluesEl.children].forEach(d => d.classList.remove("hl"));
-  [...colCluesEl.children].forEach(d => d.classList.remove("hl"));
 }
 
 document.addEventListener("keydown", e => {
@@ -489,7 +465,6 @@ document.addEventListener("keydown", e => {
   } else return;
   e.preventDefault();
   cellNodes[focusI][focusJ].focus();
-  moveCrosshair(focusI, focusJ);
 });
 
 /* ---- tools ---- */
